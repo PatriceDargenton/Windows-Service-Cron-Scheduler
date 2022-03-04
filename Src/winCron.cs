@@ -34,8 +34,10 @@ namespace winCronNamespace
         string formatHM = "HH:mm";
         string formatDateHM = "dd\\/MM\\/yyyy HH:mm";
         string formatDateHMS = "dd\\/MM\\/yyyy HH:mm:ss";
+        string formatDateHMFile = "yyyy_MM_dd_HH_mm";
         string m_path = "";
         string m_logPath = "";
+        string m_planningPath = "";
 
         public winCron()
         {
@@ -62,10 +64,12 @@ namespace winCronNamespace
             string serviceExePath = GetServiceExePath();
             m_path = FileHelper.GetParentDirectoryPath(serviceExePath);
             m_logPath = m_path + "\\winCron.log";
+            m_planningPath = m_path + "\\Planning_" + DateTime.Now.ToString(formatDateHMFile) + ".txt";
             string tasksPath = m_path + "\\Tasks.txt";
 #pragma warning disable CS0162 // Unreachable code detected
             if (ProjectInstaller.invisibleUserService) {
                 m_logPath = m_path + "\\winCronInv.log";
+                m_planningPath = m_path + "\\PlanningInv_" + DateTime.Now.ToString(formatDateHMFile) + ".txt";
                 tasksPath = m_path + "\\TasksInv.txt";
             }
 #pragma warning restore CS0162 // Unreachable code detected
@@ -79,7 +83,8 @@ namespace winCronNamespace
             string msg = "Service started! " + userService + " " + 
                 serviceVersion + " " + serviceExeDate.ToString(formatDateHM) + crLf;
             string errMsg = "";
-            
+            string taskList = "";
+
             string[] txtCrons = FileHelper.ReadFile(tasksPath, out errMsg);
             
             var cronList = new List<string>();
@@ -94,12 +99,48 @@ namespace winCronNamespace
             var dailyDic = new SortedDic<String, clsTaskList>();
             var weeklyDic = new SortedDic<String, clsTaskList>();
             var monthlyDic = new SortedDic<String, clsTaskList>();
+            ReadPlanning(tasksPath, ref msg, ref errMsg, ref taskList,
+                frequentlyDic, hourlyDic, dailyDic, weeklyDic, monthlyDic);
+            var planningIntro = msg;
+
+            LogMessage(msg);
+
+            // 04/03/2022 Print also the planning into an external file
+            var planning = PrintPlanning(frequentlyDic, dailyDic, weeklyDic, monthlyDic);
+            LogMessage(planning);
+            WritePlanning(taskList + crLf + planningIntro + crLf + planning);
+            //LogMessage(PrintPlanning(frequentlyDic, dailyDic, weeklyDic, monthlyDic));
+        }
+
+        #region "Planning"
+
+        private bool ReadPlanning(string tasksPath,
+            ref string msg, ref string errMsg, ref string taskList,
+            SortedDic<String, clsTaskList> frequentlyDic,
+            SortedDic<String, clsTaskList> hourlyDic,
+            SortedDic<String, clsTaskList> dailyDic,
+            SortedDic<String, clsTaskList> weeklyDic,
+            SortedDic<String, clsTaskList> monthlyDic)
+        {
+            string[] txtCrons = FileHelper.ReadFile(tasksPath, out errMsg);
+
+            taskList = "Tasks:" + crLf + crLf + String.Join(crLf, txtCrons) + crLf;
+
+            var cronList = new List<string>();
+            foreach (string cron in txtCrons)
+            {
+                if (cron.StartsWith("//")) continue; // Task comment
+                if (String.IsNullOrEmpty(cron.Trim())) continue; // Task blank line
+                cronList.Add(cron.Trim());
+            }
+
             bool errFound = false;
             int nbCronsOK = 0;
             foreach (string cronTaskLine in cronList)
             {
                 string[] fields = cronTaskLine.Split(':');
-                if (fields.Length < 2) {
+                if (fields.Length < 2)
+                {
                     msg += "  -> Syntax error: [" + cronTaskLine + "]" + crLf;
                     continue;
                 }
@@ -111,11 +152,13 @@ namespace winCronNamespace
                 if (ub >= 0) cron = fields[0].Trim();
                 if (ub >= 1) task = fields[1].Trim();
                 if (ub >= 2) strNoLog = fields[2].Trim();
-                if (strNoLog == "NoLog") { 
-                    noLog = true; strNoLog = " (no log)"; 
+                if (strNoLog == "NoLog")
+                {
+                    noLog = true; strNoLog = " (no log)";
                 }
 
-                if (checkFilePathCmd && !File.Exists(m_path + "\\" + task)) {
+                if (checkFilePathCmd && !File.Exists(m_path + "\\" + task))
+                {
                     msg += "  -> Can't find: [" + m_path + "\\" + task + "]" + crLf;
                     continue;
                 }
@@ -124,28 +167,26 @@ namespace winCronNamespace
                 string cronDescr = CronExpressionDescriptor.ExpressionDescriptor.GetDescription(cron);
                 msg += "  " + task + ": [" + cron + "]: " + cronDescr + strNoLog + crLf;
 
-                if (!MakePlanning(cron, task, cronDescr, 
-                        frequentlyDic, hourlyDic, dailyDic, weeklyDic, monthlyDic, ref errMsg)) {
+                if (!MakePlanning(cron, task, cronDescr,
+                        frequentlyDic, hourlyDic, dailyDic, weeklyDic, monthlyDic, ref errMsg))
+                {
                     msg += "  -> Syntax error: " + errMsg + crLf;
                     continue;
                 }
 
-                if (!StartTasks(cron, task, noLog, ref errMsg)) {
+                if (!StartTasks(cron, task, noLog, ref errMsg))
+                {
                     msg += "  Crons bug: " + errMsg + crLf;
                     errFound = true;
                     break;
                 }
                 nbCronsOK++;
             }
-            if (nbCronsOK==0) msg += "  No cron found!" + crLf;
+            if (nbCronsOK == 0) msg += "  No cron found!" + crLf;
             else if (!errFound) msg += "  Crons ok!" + crLf;
 
-            LogMessage(msg);
-
-            LogMessage(PrintPlanning(frequentlyDic, dailyDic, weeklyDic, monthlyDic));
+            return true;
         }
-
-        #region "Planning"
 
         class clsTask
         {
@@ -425,6 +466,12 @@ namespace winCronNamespace
             string errMsg = "";
             string dateMsg = DateTime.Now.ToString(formatDateHMS) + " " + msg + crLf;
             FileHelper.WriteFile(m_logPath, dateMsg, out errMsg, append: true);
+        }
+        
+        void WritePlanning(string planning)
+        {
+            string errMsg = "";
+            FileHelper.WriteFile(m_planningPath, planning, out errMsg, append: false);
         }
 
         bool StartTasks(string cron, string task, bool noLog, ref string errMsg)
