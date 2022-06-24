@@ -44,8 +44,8 @@
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="CronExpressionDescriptor, Version=2.15.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\CronExpressionDescriptor.2.15.0\lib\netstandard2.0\CronExpressionDescriptor.dll</HintPath>
+    <Reference Include="CronExpressionDescriptor, Version=2.16.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>packages\CronExpressionDescriptor.2.16.0\lib\netstandard2.0\CronExpressionDescriptor.dll</HintPath>
     </Reference>
     <Reference Include="NCrontab, Version=3.3.1.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>packages\NCrontab.3.3.1\lib\net35\NCrontab.dll</HintPath>
